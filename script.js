@@ -1151,7 +1151,7 @@ function addPlinkoHistory(slot, mult, net){
 // Expose
 window.openPlinko = openPlinko;
 
-/* ===== JeeLotto – Logik ===== */
+/* ===== JeeLotto – Verbesserte Logik ===== */
 (function(){
   const MODAL = document.getElementById('jeelottoModal');
   const board = document.getElementById('jl-board');
@@ -1171,7 +1171,7 @@ window.openPlinko = openPlinko;
   /* ---- Hilfen: Zeit & Seed ---- */
 
   // ISO-Wochenstart (Montag) der Woche von 'date'
-  function startOfISOWeek(date=new Date()){
+  function startOfISOWeek(date = new Date()){
     const d = new Date(date.getTime());
     const day = (d.getDay() + 6) % 7; // Mo=0 ... So=6
     d.setDate(d.getDate() - day);
@@ -1180,7 +1180,7 @@ window.openPlinko = openPlinko;
   }
 
   // Dienstag derselben ISO-Woche (0 Uhr); wenn 'date' noch vor Di liegt -> Dienstag der Vorwoche
-  function thisWeekTuesday(date=new Date()){
+  function thisWeekTuesday(date = new Date()){
     const mon = startOfISOWeek(date);
     const tue = new Date(mon);
     tue.setDate(mon.getDate() + 1);
@@ -1190,7 +1190,7 @@ window.openPlinko = openPlinko;
   }
 
   // Nächster Dienstag (0 Uhr) nach 'date'
-  function nextTuesdayBase(date=new Date()){
+  function nextTuesdayBase(date = new Date()){
     const mon = startOfISOWeek(date);
     const tue = new Date(mon);
     tue.setDate(mon.getDate() + 1);
@@ -1235,59 +1235,102 @@ window.openPlinko = openPlinko;
   }
 
   // Deterministisches RNG (Seed = WeekKey)
-  function xmur3(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; } return function(){ h=Math.imul(h^ (h>>>16),2246822507); h=Math.imul(h^ (h>>>13),3266489909); return (h^ (h>>>16))>>>0; } }
-  function mulberry32(a){ return function(){ let t = a+=0x6D2B79F5; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; } }
-  function rngFromKey(key){ const seed = xmur3('JEELOTTO-'+key)(); return mulberry32(seed); }
+  function xmur3(str){ 
+    let h = 1779033703 ^ str.length; 
+    for(let i = 0; i < str.length; i++){ 
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353); 
+      h = h << 13 | h >>> 19; 
+    } 
+    return function(){ 
+      h = Math.imul(h ^ (h >>> 16), 2246822507); 
+      h = Math.imul(h ^ (h >>> 13), 3266489909); 
+      return (h ^ (h >>> 16)) >>> 0; 
+    } 
+  }
+  
+  function mulberry32(a){ 
+    return function(){ 
+      let t = a += 0x6D2B79F5; 
+      t = Math.imul(t ^ t >>> 15, t | 1); 
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61); 
+      return ((t ^ t >>> 14) >>> 0) / 4294967296; 
+    } 
+  }
+  
+  function rngFromKey(key){ 
+    const seed = xmur3('JEELOTTO-' + key)(); 
+    return mulberry32(seed); 
+  }
 
   function lottoKey(){
-  const id = (window.currentUser?.email || window.currentUser?.username || 'guest');
-  return 'jeelottoTickets:' + id;
-}
-
-// einmalige Migration vom alten globalen Key
-(function migrateGlobalLotto(){
-  const old = localStorage.getItem('jeelottoTickets');
-  const k = lottoKey();
-  if (old && !localStorage.getItem(k)) {
-    localStorage.setItem(k, old);
+    const id = (window.currentUser?.email || window.currentUser?.username || 'guest');
+    return 'jeelottoTickets:' + id;
   }
-})();
 
-function readTickets(){
-  try{ return JSON.parse(localStorage.getItem(lottoKey())||'[]'); }catch{ return []; }
-}
-function writeTickets(t){
-  localStorage.setItem(lottoKey(), JSON.stringify(t));
-}
+  // einmalige Migration vom alten globalen Key
+  (function migrateGlobalLotto(){
+    const old = localStorage.getItem('jeelottoTickets');
+    const k = lottoKey();
+    if (old && !localStorage.getItem(k)) {
+      localStorage.setItem(k, old);
+      localStorage.removeItem('jeelottoTickets');
+    }
+  })();
+
+  function readTickets(){
+    try{ 
+      return JSON.parse(localStorage.getItem(lottoKey()) || '[]'); 
+    } catch(e){ 
+      console.error('Error reading tickets:', e);
+      return []; 
+    }
+  }
+  
+  function writeTickets(t){
+    localStorage.setItem(lottoKey(), JSON.stringify(t));
+  }
 
   /* ---- Zahlen-Board ---- */
   const selected = new Set();
+  
   function renderBoard(){
     board.innerHTML = '';
-    for(let i=1;i<=50;i++){
-      const b=document.createElement('button');
-      b.type='button'; b.textContent=i; b.className='jl-num'+(selected.has(i)?' selected':'');
-      b.addEventListener('click',()=>{
-        if(selected.has(i)){ selected.delete(i); b.classList.remove('selected'); }
-        else{
-          if(selected.size>=5) return;
-          selected.add(i); b.classList.add('selected');
+    for(let i = 1; i <= 50; i++){
+      const b = document.createElement('button');
+      b.type = 'button'; 
+      b.textContent = i; 
+      b.className = 'jl-num' + (selected.has(i) ? ' selected' : '');
+      b.addEventListener('click', () => {
+        if(selected.has(i)){
+          selected.delete(i); 
+          b.classList.remove('selected');
+        } else {
+          if(selected.size >= 5) {
+            showNotification('Maximal 5 Zahlen auswählen', true);
+            return;
+          }
+          selected.add(i); 
+          b.classList.add('selected');
         }
         updateHint();
       });
       board.appendChild(b);
     }
   }
+  
   function updateHint(){
     const allowed = canPlayToday();
-    hintEl.textContent = allowed ? `Du hast ${selected.size}/5 Zahlen gewählt.` : 'Tipps sind nur dienstags möglich.';
-    BTN_SUBMIT.disabled = !(allowed && selected.size===5);
+    hintEl.textContent = allowed ? 
+      `Du hast ${selected.size}/5 Zahlen gewählt.` : 
+      'Tipps sind nur dienstags möglich.';
+    BTN_SUBMIT.disabled = !(allowed && selected.size === 5);
   }
 
   /* ---- Zeit-Status ---- */
-  function canPlayToday(now=new Date()){
-    return now.getDay()===2; // Dienstag
+  function canPlayToday(now = new Date()){
+    return now.getDay() === 2; // Dienstag
   }
+  
   function currentWeekKey(){
     const now = new Date();
     const tue = thisWeekTuesday(now); // letzter Dienstag
@@ -1317,27 +1360,29 @@ function writeTickets(t){
   /* ---- Ziehung (deterministisch) ---- */
   function winningNumbersForWeek(key){
     const rnd = rngFromKey(key);
-    const pool = Array.from({length:50},(_,i)=>i+1);
-    const win=[];
-    for(let j=0;j<5;j++){
-      const idx = Math.floor(rnd()*pool.length);
-      win.push(pool.splice(idx,1)[0]);
+    const pool = Array.from({length:50}, (_, i) => i + 1);
+    const win = [];
+    for(let j = 0; j < 5; j++){
+      const idx = Math.floor(rnd() * pool.length);
+      win.push(pool.splice(idx, 1)[0]);
     }
-    win.sort((a,b)=>a-b);
+    win.sort((a, b) => a - b);
     return win;
   }
 
   // Verpasste Ziehungen nachholen/abrechnen
   function settleIfDue(){
     const tix = readTickets();
-    if(!tix.length) return;
+    if(!tix.length) return false;
+    
     const now = new Date();
     const grouped = {};
     for(const t of tix){
-      grouped[t.week] ??= [];
+      grouped[t.week] = grouped[t.week] || [];
       grouped[t.week].push(t);
     }
-    let changed=false;
+    
+    let changed = false;
 
     for (const week of Object.keys(grouped)) {
       const [yy, ww] = week.split('-W');
@@ -1354,56 +1399,80 @@ function writeTickets(t){
           const prize = PRIZES[matches] || 0;
           t.settled = true;
           t.result = { matches, prize, winNums, drawnAt: draw.toISOString() };
-          if (prize > 0) credit(prize, `JeeLotto Gewinn (${matches} Treffer)`);
+          if (prize > 0) {
+            credit(prize, `JeeLotto Gewinn (${matches} Treffer)`);
+            showNotification(`Glückwunsch! Du hast CHF${prize} mit ${matches} richtigen Zahlen gewonnen!`);
+          }
           changed = true;
         }
       }
     }
 
-    if (changed) writeTickets(tix);
+    if (changed) {
+      writeTickets(tix);
+      renderTickets();
+    }
+    
+    return changed;
   }
 
   /* ---- Geldfunktionen – nutzen dein bestehendes User-Handling ---- */
   function credit(amount, note){
     if(window.currentUser){
-      currentUser.balance = (currentUser.balance||0) + amount;
-      if(typeof persistCurrentUser==='function') persistCurrentUser();
-      if(typeof showNotification==='function') showNotification(`+CHF${amount.toFixed(2)} ${note||''}`);
+      currentUser.balance = (currentUser.balance || 0) + amount;
+      if(typeof persistCurrentUser === 'function') persistCurrentUser();
+      if(typeof showNotification === 'function') showNotification(`+CHF${amount.toFixed(2)} ${note || ''}`);
     }
   }
+  
   function debit(amount){
     if(window.currentUser){
-      if((currentUser.balance||0) < amount){
-        if(typeof showNotification==='function') showNotification('Nicht genug Guthaben.', true);
+      if((currentUser.balance || 0) < amount){
+        if(typeof showNotification === 'function') showNotification('Nicht genug Guthaben.', true);
         return false;
       }
       currentUser.balance -= amount;
-      if(typeof persistCurrentUser==='function') persistCurrentUser();
+      if(typeof persistCurrentUser === 'function') persistCurrentUser();
       return true;
     }
-    return true; // falls kein Usersystem aktiv
+    return false; // falls kein Usersystem aktiv
   }
 
   /* ---- UI -> Tickets rendern ---- */
   function renderTickets(){
-    const tix = readTickets().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    if(!tix.length){ ticketsEl.innerHTML = '<p class="jl-dim">Noch keine Tickets.</p>'; return; }
-    ticketsEl.innerHTML='';
+    const tix = readTickets().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if(!tix.length){ 
+      ticketsEl.innerHTML = '<p class="jl-dim">Noch keine Tickets.</p>'; 
+      return; 
+    }
+    
+    ticketsEl.innerHTML = '';
     for(const t of tix){
-      const div=document.createElement('div'); div.className='jl-ticket';
-      const nums = t.numbers.slice().sort((a,b)=>a-b).join(' • ');
+      const div = document.createElement('div'); 
+      div.className = 'jl-ticket';
+      const nums = t.numbers.slice().sort((a, b) => a - b).join(' • ');
       const week = t.week;
       const created = new Date(t.createdAt);
-      let badge='<span class="jl-badge wait">Offen</span>';
-      let extra='';
+      
+      let badge = '<span class="jl-badge wait">Offen</span>';
+      let extra = '';
+      
       if(t.settled){
         const win = t.result.winNums.join(' • ');
-        if(t.result.prize>0) badge=`<span class="jl-badge win">Gewinn CHF${t.result.prize.toFixed(2)}</span>`;
-        else badge=`<span class="jl-badge lose">Kein Gewinn</span>`;
+        if(t.result.prize > 0) {
+          badge = `<span class="jl-badge win">Gewinn CHF${t.result.prize.toFixed(2)}</span>`;
+        } else {
+          badge = `<span class="jl-badge lose">Kein Gewinn</span>`;
+        }
         extra = `<div class="jl-dim jl-xs">Gewinnzahlen: <b>${win}</b> · Ziehung: ${new Date(t.result.drawnAt).toLocaleString()}</div>`;
       }
+      
       div.innerHTML = `
-        <div class="meta"><span>Woche: <b>${week}</b></span><span>Kauf: ${created.toLocaleString()}</span> ${badge}</div>
+        <div class="meta">
+          <span>Woche: <b>${week}</b></span>
+          <span>Kauf: ${created.toLocaleDateString()}</span> 
+          ${badge}
+        </div>
         <div class="nums">Tipp: ${nums}</div>
         ${extra}
       `;
@@ -1413,40 +1482,81 @@ function writeTickets(t){
 
   /* ---- Public API: Spiel öffnen ---- */
   window.openJeeLotto = function(){
-    if(typeof isLoggedIn!=='undefined' && !isLoggedIn){
-      if(typeof showNotification==='function') showNotification('Bitte zuerst anmelden.', true);
-      if(typeof loginModal!=='undefined') loginModal.style.display='flex';
+    if(typeof isLoggedIn !== 'undefined' && !isLoggedIn){
+      if(typeof showNotification === 'function') showNotification('Bitte zuerst anmelden.', true);
+      if(typeof loginModal !== 'undefined') loginModal.style.display = 'flex';
       return;
     }
-    settleIfDue();              // verpasste Ziehungen nachholen
-    renderBoard(); selected.clear(); updateHint();
+    
+    // Verpasste Ziehungen nachholen
+    const hasSettled = settleIfDue();
+    
+    // UI aktualisieren
+    renderBoard(); 
+    selected.clear(); 
+    updateHint();
+    
     const nd = nextDrawInfo();
     nextDrawEl.textContent = `${nd.when.toLocaleString()} (Woche ${nd.key})`;
-    statusEl.textContent = canPlayToday()? 'Heute kannst du mitspielen.' : 'Heute kein Spieltag. Tipps nur dienstags.';
-    MODAL.hidden=false;
+    statusEl.textContent = canPlayToday() ? 
+      'Heute kannst du mitspielen!' : 
+      'Heute kein Spieltag. Tipps nur dienstags.';
+    
+    MODAL.hidden = false;
 
     // ESC schließen
-    const esc = (e)=>{ if(e.key==='Escape'){ close(); document.removeEventListener('keydown',esc); } };
-    document.addEventListener('keydown',esc);
+    const esc = (e) => { 
+      if(e.key === 'Escape'){ 
+        close(); 
+        document.removeEventListener('keydown', esc); 
+      } 
+    };
+    document.addEventListener('keydown', esc);
 
     // Ticketsliste aktualisieren
     renderTickets();
+    
+    if (hasSettled) {
+      showNotification('Ausstehende Ziehungen wurden abgerechnet!');
+    }
   };
 
-  function close(){ MODAL.hidden=true; }
-  document.querySelectorAll('[data-jl-close]').forEach(el=>el.addEventListener('click', close));
-
-  BTN_CLEAR.addEventListener('click', ()=>{ selected.clear(); renderBoard(); updateHint(); });
-  BTN_RANDOM.addEventListener('click', ()=>{
-    selected.clear();
-    const pool = Array.from({length:50},(_,i)=>i+1);
-    for(let i=0;i<5;i++){ const r=Math.floor(Math.random()*pool.length); selected.add(pool.splice(r,1)[0]); }
-    renderBoard(); updateHint();
+  function close(){ 
+    MODAL.hidden = true; 
+  }
+  
+  document.querySelectorAll('[data-jl-close]').forEach(el => {
+    el.addEventListener('click', close);
   });
 
-  BTN_SUBMIT.addEventListener('click', ()=>{
-    if(selected.size!==5) return;
-    if(!canPlayToday()){ if(typeof showNotification==='function') showNotification('Tipps nur dienstags.', true); return; }
+  BTN_CLEAR.addEventListener('click', () => { 
+    selected.clear(); 
+    renderBoard(); 
+    updateHint(); 
+  });
+  
+  BTN_RANDOM.addEventListener('click', () => {
+    selected.clear();
+    const pool = Array.from({length:50}, (_, i) => i + 1);
+    for(let i = 0; i < 5; i++){ 
+      const r = Math.floor(Math.random() * pool.length); 
+      selected.add(pool.splice(r, 1)[0]); 
+    }
+    renderBoard(); 
+    updateHint();
+  });
+
+  BTN_SUBMIT.addEventListener('click', () => {
+    if(selected.size !== 5) {
+      showNotification('Bitte genau 5 Zahlen auswählen', true);
+      return;
+    }
+    
+    if(!canPlayToday()){ 
+      showNotification('Tipps nur dienstags möglich.', true); 
+      return; 
+    }
+    
     if(!debit(PRICE)) return;
 
     const week = currentWeekKey();
@@ -1458,19 +1568,34 @@ function writeTickets(t){
       settled: false,
       result: null
     });
+    
     writeTickets(tix);
-    if(typeof showNotification==='function') showNotification('Ticket gekauft. Viel Glück!');
-    selected.clear(); renderBoard(); updateHint(); renderTickets();
+    showNotification('Ticket gekauft. Viel Glück!');
+    
+    selected.clear(); 
+    renderBoard(); 
+    updateHint(); 
+    renderTickets();
   });
 
-  BTN_REFRESH.addEventListener('click', ()=>{ settleIfDue(); renderTickets(); updateNextDrawUI(); });
+  BTN_REFRESH.addEventListener('click', () => { 
+    settleIfDue(); 
+    renderTickets(); 
+    updateNextDrawUI(); 
+  });
 
   function updateNextDrawUI(){
     const nd = nextDrawInfo();
     nextDrawEl.textContent = `${nd.when.toLocaleString()} (Woche ${nd.key})`;
-    statusEl.textContent = canPlayToday()? 'Heute kannst du mitspielen.' : 'Heute kein Spieltag. Tipps nur dienstags.';
+    statusEl.textContent = canPlayToday() ? 
+      'Heute kannst du mitspielen!' : 
+      'Heute kein Spieltag. Tipps nur dienstags.';
   }
 
   // Beim Laden direkt verpasste Ziehungen auswerten
-  try{ settleIfDue(); }catch{}
+  try{ 
+    settleIfDue(); 
+  } catch(e){
+    console.error('Error settling tickets on load:', e);
+  }
 })();
